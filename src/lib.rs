@@ -2,36 +2,67 @@ use std::net::TcpListener;
 
 use actix_web::{
     dev::Server,
-    web::{self, Form},
-    App, HttpRequest, HttpResponse, HttpServer, Responder,
+    middleware::Logger,
+    web::{self},
+    App, HttpServer,
 };
+use dotenvy::dotenv;
+use routes::{greet, health_check, subscribe};
 use serde::Deserialize;
+use sqlx::PgPool;
 
-async fn greet(req: HttpRequest) -> impl Responder {
-    let name = req.match_info().get("name").unwrap_or("World");
-    format!("Hello {}!", &name)
-}
-
-async fn healtch_check() -> impl Responder {
-    HttpResponse::Ok().finish()
-}
+mod routes;
 
 #[derive(Debug, Deserialize)]
-struct FormData {
+pub struct FormData {
     email: String,
     name: String,
 }
 
-async fn subscribe(form_data: Form<FormData>) -> impl Responder {
-    HttpResponse::Ok().finish()
+pub async fn configure_test_database() -> PgPool {
+    dotenv().ok();
+    let connection_string = std::env::var("POSTGRES_URL").expect("POSTGRES_URL must be set.");
+    let test_db_name = uuid::Uuid::new_v4().to_string();
+    let connection_string = connection_string.replace("newsletter", &test_db_name);
+    let pool = PgPool::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+
+    sqlx::query(&*format!(r#"CREATE DATABASE "{}";"#, test_db_name))
+        .execute(&pool)
+        .await
+        .expect("Failed to create test database.");
+
+    let connection_string = connection_string.replace("newsletter", &test_db_name);
+    let pool = PgPool::connect(&connection_string)
+        .await
+        .expect("Failed to connect to database.");
+
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("Failed to migrate database.");
+
+    pool
 }
 
-pub fn run(listener: TcpListener) -> Result<Server, std::io::Error> {
-    let server = HttpServer::new(|| {
+pub async fn configure_database() -> sqlx::PgPool {
+    dotenv().ok();
+    let connection_string = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
+    sqlx::PgPool::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.")
+}
+
+pub fn run(listener: TcpListener, pool: PgPool) -> Result<Server, std::io::Error> {
+    let pool = web::Data::new(pool);
+    let server = HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .route("/", web::get().to(greet))
-            .route("/health_check", web::get().to(healtch_check))
+            .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
+            .app_data(pool.clone())
     })
     .listen(listener)?
     .run();
