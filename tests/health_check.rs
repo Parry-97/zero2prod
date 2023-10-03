@@ -1,11 +1,28 @@
 use std::net::TcpListener;
 
 use dotenvy::dotenv;
+use once_cell::sync::Lazy;
 use sqlx::PgPool;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
+
+//NOTE: This is an example of a lazy static variable. It is initialised the first time it is accessed.
+// This is useful for expensive initialisation procedures, such as setting up a tracing subscriber.
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        init_subscriber(subscriber);
+    }
+});
 
 #[tokio::test]
 async fn health_check_works() {
-    let pool = zero2prod::configure_test_database().await;
+    let pool = zero2prod::startup::configure_test_database().await;
     let app_address = spawn_app(pool);
     let client = reqwest::Client::new();
     let response = client
@@ -19,17 +36,19 @@ async fn health_check_works() {
 
 fn spawn_app(pool: PgPool) -> String {
     dotenv().ok();
+    Lazy::force(&TRACING);
+
     let listener = TcpListener::bind("localhost:0").expect("Failed to bind random port.");
     let port = listener.local_addr().unwrap().port();
 
-    let server = zero2prod::run(listener, pool).expect("Failed to bind address.");
+    let server = zero2prod::startup::run(listener, pool).expect("Failed to bind address.");
     tokio::spawn(server);
     format!("http://localhost:{}", port)
 }
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
-    let pool = zero2prod::configure_test_database().await;
+    let pool = zero2prod::startup::configure_test_database().await;
     let app_address = spawn_app(pool);
     let client = reqwest::Client::new();
     // Act
@@ -60,7 +79,7 @@ async fn check_db_connection() {
 // times we can simply run the same assertion against a collection of known invalid bodies that we
 // expect to fail in the same way.
 async fn subscribe_returns_a_400_when_data_is_missing() {
-    let pool = zero2prod::configure_test_database().await;
+    let pool = zero2prod::startup::configure_test_database().await;
     let app_address = spawn_app(pool);
     let client = reqwest::Client::new();
     let test_cases = vec![

@@ -24,9 +24,11 @@ actix-web = "4.0"
 tokio = { version = "1.0", features = ["full"] }
 #Environment variable access libraries
 dotenvy = "0.15"
-env_logger = "0.9"
-log = "0.4"
-
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+tracing-bunyan-formatter = "0.3"
+secrecy = { version = "0.6", features = ["serde"] }
+tracing-actix-web = "0.5"
 
 #Postgres access library
 sqlx = {version = "0.7", default_features = false, features = ["postgres","runtime-tokio", "tls-rustls", "uuid", "chrono","macros", "migrate"]}
@@ -47,3 +49,4 @@ features = [
 
 [dev-dependencies]
 reqwest = "0.11"
+once_cell = "1"
