@@ -1,5 +1,7 @@
 use std::net::TcpListener;
 
+use zero2prod::startup::run;
+
 //NOTE: `tokio::test` is the testing equivalent of `tokio::main`.
 //You can inspect the generated code using `cargo expand --test health_check (<- name of the file)`
 #[tokio::test]
@@ -67,7 +69,7 @@ fn spawn_app() -> String {
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let server = zero2prod::run(listener).expect("Failed to bind address");
+    let server = run(listener).expect("Failed to bind address");
     // zero2prod::run().await
     //NOTE: We need to use `tokio::spawn` to run it as a background task
     tokio::spawn(server);

@@ -1,6 +1,7 @@
 use std::net::TcpListener;
 
 use actix_web::{HttpRequest, Responder};
+use zero2prod::configuration::get_configuration;
 
 async fn _greet(req: HttpRequest) -> impl Responder {
     let name = req.match_info().get("name").unwrap_or("World");
@@ -9,8 +10,9 @@ async fn _greet(req: HttpRequest) -> impl Responder {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts
-    //down
-    let listener = TcpListener::bind("127.0.0.1:8000")?;
-    zero2prod::run(listener)?.await
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let address = format!("localhost:{}", configuration.app_port);
+    //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts down
+    let listener = TcpListener::bind(address)?;
+    zero2prod::startup::run(listener)?.await
 }
