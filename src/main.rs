@@ -14,5 +14,8 @@ async fn main() -> std::io::Result<()> {
     let address = format!("localhost:{}", configuration.app_port);
     //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts down
     let listener = TcpListener::bind(address)?;
-    zero2prod::startup::run(listener)?.await
+    let pool = sqlx::PgPool::connect(configuration.database.connection_string().as_str())
+        .await
+        .expect("Failed to connect to Postgres");
+    zero2prod::startup::run(listener, pool)?.await
 }

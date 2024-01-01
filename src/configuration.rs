@@ -15,6 +15,24 @@ pub struct DatabaseSettings {
     pub db_name: String,
 }
 
+impl DatabaseSettings {
+    pub fn connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.db_name
+        )
+    }
+
+    pub fn connection_string_without_db(&self) -> String {
+        //NOTE: We want to only create a connection to the PG Instance, create
+        //a temporary database and run migrations on it.
+        format!(
+            "postgres://{}:{}@{}:{}",
+            self.username, self.password, self.host, self.port
+        )
+    }
+}
+
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     let mut settings = config::Config::default();
 
