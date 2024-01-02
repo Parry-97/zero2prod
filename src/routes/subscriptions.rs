@@ -10,6 +10,13 @@ pub struct FormData {
 }
 
 pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) -> impl Responder {
+    let request = Uuid::new_v4();
+    log::info!(
+        "request_id {} - Adding '{}' `{}` as a new subscriber",
+        request,
+        form.email,
+        form.name
+    );
     log::info!("Saving new subscribers details in the database");
     match sqlx::query!(
         r#"
