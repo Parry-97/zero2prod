@@ -1,11 +1,18 @@
-use std::{net::TcpListener, task::Wake};
+use std::net::TcpListener;
 
+use once_cell::sync::Lazy;
 use sqlx::{Executor, PgPool};
 use uuid::Uuid;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     startup::run,
+    telemetry::{get_subscriber, init_subscriber},
 };
+
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let subscriber = get_subscriber("test".into(), "debug".into());
+    init_subscriber(subscriber);
+});
 
 #[derive(Debug)]
 pub struct TestApp {
@@ -85,8 +92,9 @@ async fn subscribe_returns_400_when_data_is_missing() {
 //NOTE: This function is the only piece in our tests that depends on the application code.
 //Everything else is decoupled from the underlying implementation details
 async fn spawn_app() -> TestApp {
-    //WARN: when we call await on `run` it starts listening ,on the address we specified,
-    //indefinetely. It never returns and our test logic never gets executed.
+    //The first time `initialize` is invoked the code in `TRACING` is executed.
+    //All other invocations will instead skip execution.
+    Lazy::force(&TRACING);
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();

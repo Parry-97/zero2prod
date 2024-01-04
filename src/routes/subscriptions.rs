@@ -19,9 +19,6 @@ pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) 
         subscriber_name = %form.name
     );
 
-    //WARNING: Calling enter inside an async block or function can cause the
-    //current span to be lost.This is because the current span is stored
-    //in thread-local storage, which is not accessible from async contexts.
     let _request_span_guard = request_span.enter();
 
     //NOTE: We don't need to call enter on query_span because instrument takes care of it automatically
@@ -42,11 +39,11 @@ pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) 
     .await
     {
         Ok(_) => {
-            log::info!("New subscriber details have been added");
+            tracing::info!("New subscriber details have been added");
             HttpResponse::Ok()
         }
         Err(e) => {
-            log::error!("Failed to execute query: {:?}", e);
+            tracing::error!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError()
         }
     }
