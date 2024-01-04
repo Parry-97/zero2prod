@@ -1,6 +1,7 @@
 use std::net::TcpListener;
 
 use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use sqlx::{Executor, PgPool};
 use uuid::Uuid;
 use zero2prod::{
@@ -10,8 +11,24 @@ use zero2prod::{
 };
 
 static TRACING: Lazy<()> = Lazy::new(|| {
-    let subscriber = get_subscriber("test".into(), "debug".into());
-    init_subscriber(subscriber);
+    let default_level = "info";
+    let subscriber_name = "test";
+
+    //WARN: We cannot assign the output of `get_subscriber` to a variable based on value of `TEST_LOG`
+    //to avoid repetitions because the sink is part of the actual concrete type returned by
+    //`get_subscriber` (something like `Layered<...,Sink,>`), therefore they are not the same type.
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(
+            subscriber_name.into(),
+            default_level.into(),
+            std::io::stdout,
+        );
+        init_subscriber(subscriber);
+    } else {
+        let subscriber =
+            get_subscriber(subscriber_name.into(), default_level.into(), std::io::sink);
+        init_subscriber(subscriber);
+    }
 });
 
 #[derive(Debug)]
@@ -115,15 +132,20 @@ async fn spawn_app() -> TestApp {
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    let mut pool = sqlx::PgPool::connect(config.connection_string_without_db().as_str())
-        .await
-        .expect("Failed to connect to Postgres");
+    let mut pool = sqlx::PgPool::connect(
+        config
+            .connection_string_without_db()
+            .expose_secret()
+            .as_str(),
+    )
+    .await
+    .expect("Failed to connect to Postgres");
 
     pool.execute(format!(r#"CREATE DATABASE "{}";"#, config.db_name).as_str())
         .await
         .expect("Failed to create DB");
 
-    pool = PgPool::connect(config.connection_string().as_str())
+    pool = PgPool::connect(config.connection_string().expose_secret().as_str())
         .await
         .expect("Failed to connect to Postgres");
 

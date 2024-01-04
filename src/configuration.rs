@@ -1,3 +1,4 @@
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -9,27 +10,34 @@ pub struct Settings {
 #[derive(Debug, Deserialize)]
 pub struct DatabaseSettings {
     pub username: String,
-    pub password: String,
+    pub password: Secret<String>,
     pub port: u16,
     pub host: String,
     pub db_name: String,
 }
 
 impl DatabaseSettings {
-    pub fn connection_string(&self) -> String {
-        format!(
+    pub fn connection_string(&self) -> Secret<String> {
+        Secret::new(format!(
             "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.host, self.port, self.db_name
-        )
+            self.username,
+            self.password.expose_secret(),
+            self.host,
+            self.port,
+            self.db_name
+        ))
     }
 
-    pub fn connection_string_without_db(&self) -> String {
+    pub fn connection_string_without_db(&self) -> Secret<String> {
         //NOTE: We want to only create a connection to the PG Instance, create
         //a temporary database and run migrations on it.
-        format!(
+        Secret::new(format!(
             "postgres://{}:{}@{}:{}",
-            self.username, self.password, self.host, self.port
-        )
+            self.username,
+            self.password.expose_secret(),
+            self.host,
+            self.port
+        ))
     }
 }
 
