@@ -18,17 +18,20 @@ async fn main() -> std::io::Result<()> {
     init_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read configuration");
-    let address = format!("localhost:{}", configuration.app_port);
+    let address = format!(
+        "{}:{}",
+        configuration.application.port, configuration.application.port
+    );
     //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts down
     let listener = TcpListener::bind(address)?;
-    let pool = sqlx::PgPool::connect(
+    let pool = sqlx::PgPool::connect_lazy(
         configuration
             .database
             .connection_string()
             .expose_secret()
             .as_str(),
     )
-    .await
+    // .await
     .expect("Failed to connect to Postgres");
     zero2prod::startup::run(listener, pool)?.await
 }
