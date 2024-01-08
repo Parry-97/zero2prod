@@ -3,7 +3,9 @@ FROM rust:latest
 WORKDIR /app
 RUN apt update && apt install clang -y
 COPY . .
+
 ENV SQLX_OFFLINE true
+ENV APP_ENVIRONMENT production
 
 RUN cargo build --release
 

@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
     let configuration = get_configuration().expect("Failed to read configuration");
     let address = format!(
         "{}:{}",
-        configuration.application.port, configuration.application.port
+        configuration.application.host, configuration.application.port
     );
     //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts down
     let listener = TcpListener::bind(address)?;
