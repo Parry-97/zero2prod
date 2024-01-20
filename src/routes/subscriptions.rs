@@ -1,7 +1,10 @@
 use actix_web::{web, HttpResponse, Responder};
 use chrono::Utc;
 use sqlx::PgPool;
+use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
+
+use crate::domain::{NewSubscriber, SubscriberName};
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -18,19 +21,43 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) -> impl Responder {
-    match insert_subscriber(app_state.get_ref(), form).await {
+    if !is_valid_name(&form.name) {
+        return HttpResponse::BadRequest().finish();
+    }
+    // `web::Form` is a wrapper around `FormData`
+    // `form.0` gives us access to the underlying `FormData`
+    let new_subscriber = NewSubscriber {
+        name: SubscriberName::parse(form.0.name),
+        email: form.0.email,
+    };
+    match insert_subscriber(app_state.get_ref(), &new_subscriber).await {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
+pub fn is_valid_name(s: &str) -> bool {
+    let is_empty_or_whitespace = s.trim().is_empty();
+
+    //NOTE: A grapheme is defined by the Unicode standard as a "user-perceived" character: an
+    //example would be an Umlaut letter, but it is composed of two characters
+    //`graphemes` returns an iterator over the graphemes in the input `s`. `true` specifies that we
+    //want to use the extended grapheme definition set, the recommended one
+    let is_too_long = s.graphemes(true).count() > 256;
+
+    let forbidden_chars = ['/', '(', ')', '"', '<', '>', '\\', '{', '}'];
+    let contains_forbidden_chars = s.chars().any(|g| forbidden_chars.contains(&g));
+
+    !(is_empty_or_whitespace || is_too_long || contains_forbidden_chars)
+}
+
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, pool)
+    skip(new_subscriber, pool)
 )]
 pub async fn insert_subscriber(
     pool: &PgPool,
-    form: web::Form<FormData>,
+    new_subscriber: &NewSubscriber,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -38,8 +65,8 @@ pub async fn insert_subscriber(
     VALUES ($1, $2, $3, $4)
     "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscriber.email,
+        new_subscriber.name.inner_ref(),
         Utc::now()
     )
     .execute(pool)
