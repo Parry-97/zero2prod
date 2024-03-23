@@ -21,13 +21,15 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) -> impl Responder {
-    if !is_valid_name(&form.name) {
-        return HttpResponse::BadRequest().finish();
-    }
-    // `web::Form` is a wrapper around `FormData`
+    let name = match SubscriberName::parse(form.0.name) {
+        Err(_) => return HttpResponse::BadRequest().finish(),
+        Ok(name) => name,
+    };
+    // `web::Form` is a tuple struct around `FormData`
     // `form.0` gives us access to the underlying `FormData`
+    // or we can use the `into_inner` method as well
     let new_subscriber = NewSubscriber {
-        name: SubscriberName::parse(form.0.name),
+        name,
         email: form.0.email,
     };
     match insert_subscriber(app_state.get_ref(), &new_subscriber).await {
@@ -66,7 +68,7 @@ pub async fn insert_subscriber(
     "#,
         Uuid::new_v4(),
         new_subscriber.email,
-        new_subscriber.name.inner_ref(),
+        new_subscriber.name.as_ref(),
         Utc::now()
     )
     .execute(pool)
