@@ -4,12 +4,23 @@ use sqlx::PgPool;
 use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
-use crate::domain::{NewSubscriber, SubscriberName};
+use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
     email: String,
     name: String,
+}
+
+impl TryFrom<FormData> for NewSubscriber {
+    type Error = String;
+
+    fn try_from(value: FormData) -> Result<Self, Self::Error> {
+        let email = SubscriberEmail::parse(value.email)?;
+        let name = SubscriberName::parse(value.name)?;
+        Ok(NewSubscriber { email, name })
+    }
+    // add code here
 }
 
 #[tracing::instrument(
@@ -21,17 +32,15 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, app_state: web::Data<PgPool>) -> impl Responder {
-    let name = match SubscriberName::parse(form.0.name) {
-        Err(_) => return HttpResponse::BadRequest().finish(),
-        Ok(name) => name,
-    };
-    // `web::Form` is a tuple struct around `FormData`
+    //NOTE: `web::Form` is a tuple struct around `FormData`
     // `form.0` gives us access to the underlying `FormData`
     // or we can use the `into_inner` method as well
-    let new_subscriber = NewSubscriber {
-        name,
-        email: form.0.email,
+
+    let new_subscriber = match form.0.try_into() {
+        Ok(new_subscriber) => new_subscriber,
+        Err(error) => return HttpResponse::BadRequest().body(error),
     };
+
     match insert_subscriber(app_state.get_ref(), &new_subscriber).await {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
@@ -67,7 +76,7 @@ pub async fn insert_subscriber(
     VALUES ($1, $2, $3, $4)
     "#,
         Uuid::new_v4(),
-        new_subscriber.email,
+        new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
         Utc::now()
     )
