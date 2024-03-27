@@ -4,6 +4,7 @@ use actix_web::{HttpRequest, Responder};
 use secrecy::ExposeSecret;
 use zero2prod::{
     configuration::get_configuration,
+    email_client::EmailClient,
     telemetry::{get_subscriber, init_subscriber},
 };
 
@@ -22,6 +23,17 @@ async fn main() -> std::io::Result<()> {
         "{}:{}",
         configuration.application.host, configuration.application.port
     );
+
+    let sender_email = configuration
+        .email_client
+        .sender()
+        .expect("Invalid sender email address");
+
+    let email_client = EmailClient::new(
+        configuration.email_client.base_url,
+        sender_email,
+        configuration.email_client.authorization_token,
+    );
     //NOTE: The Server must be awaited and polled to start running. It resolves when it is shuts down
     let listener = TcpListener::bind(address)?;
     let pool = sqlx::PgPool::connect_lazy(
@@ -33,5 +45,5 @@ async fn main() -> std::io::Result<()> {
     )
     // .await
     .expect("Failed to connect to Postgres");
-    zero2prod::startup::run(listener, pool)?.await
+    zero2prod::startup::run(listener, pool, email_client)?.await
 }
